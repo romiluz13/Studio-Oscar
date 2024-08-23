@@ -7,5 +7,6 @@ export default defineConfig({
   server: {
     host: 'localhost',
     port: 5173,
-  }
+  },
+  base: '/Studio-Oscar-23.8/'
 })
