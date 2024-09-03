@@ -1,7 +1,13 @@
-   export default defineConfig({
-     base: '/Studio-Oscar-23.8/',
-     build: {
-       outDir: 'dist', // or 'docs', depending on your GitHub Pages setup
-     },
-     // ... other config
-   });
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: '0.0.0.0',
+    port: 3000,
+  },
+  define: {
+    'process.env': process.env
+  }
+})

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { User } from "firebase/auth";
-import { collection, query, where, onSnapshot, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, deleteDoc, doc, setDoc, updateDoc, getDoc } from "firebase/firestore";
 import { getAuth, signOut, updateProfile } from "firebase/auth";
 import { db, storage } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -23,6 +23,7 @@ const Profile: React.FC = () => {
   const [profilePic, setProfilePic] = useState<File | null>(null);
   const navigate = useNavigate();
   const auth = getAuth();
+  const [emailNotifications, setEmailNotifications] = useState(false);
 
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
@@ -41,12 +42,34 @@ const Profile: React.FC = () => {
           setPosts(userPosts);
         });
 
+        // Fetch or set default email notification preference
+        fetchEmailPreference(currentUser.uid);
+
         return () => unsubscribePosts();
       }
     });
 
     return () => unsubscribeAuth();
   }, [auth]);
+
+  const fetchEmailPreference = async (userId: string) => {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.emailNotifications === undefined) {
+        // If emailNotifications is not set, default to true
+        await updateDoc(userRef, { emailNotifications: true });
+        setEmailNotifications(true);
+      } else {
+        setEmailNotifications(userData.emailNotifications);
+      }
+    } else {
+      // If user document doesn't exist, create it with default preference
+      await setDoc(userRef, { emailNotifications: true });
+      setEmailNotifications(true);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -86,6 +109,17 @@ const Profile: React.FC = () => {
         console.error("Error uploading profile picture:", error);
         toast.error('Failed to update profile picture. Please try again.');
       }
+    }
+  };
+
+  const handleEmailNotificationToggle = async () => {
+    if (user) {
+      const newValue = !emailNotifications;
+      await updateDoc(doc(db, 'users', user.uid), {
+        emailNotifications: newValue,
+      });
+      setEmailNotifications(newValue);
+      toast.success(`Email notifications ${newValue ? 'enabled' : 'disabled'}`);
     }
   };
 
@@ -194,6 +228,17 @@ const Profile: React.FC = () => {
             </div>
           ))
         )}
+        <div className="mt-4">
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              checked={emailNotifications}
+              onChange={handleEmailNotificationToggle}
+              className="mr-2"
+            />
+            Receive email notifications for mentions
+          </label>
+        </div>
       </div>
     </div>
   );

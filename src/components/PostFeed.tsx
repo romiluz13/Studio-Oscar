@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, addDoc, Timestamp, deleteDoc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { Heart, MessageCircle, Share2, PlusCircle, Tag, Search, Image, Youtube, Edit, Trash2, Gift, X } from "lucide-react";
+import { Heart, MessageCircle, Share2, PlusCircle, Tag, Search, Image, Youtube, Edit, Trash2, Gift, X, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBeforeUnload } from "react-use";
 
 interface Post {
   id: string;
@@ -26,6 +27,7 @@ interface Post {
   isBlessing: boolean;
   blessingText?: string;
   eventId?: string;
+  mentions: string[];
 }
 
 interface Event {
@@ -35,6 +37,7 @@ interface Event {
 }
 
 const PostFeed: React.FC = () => {
+  console.log("PostFeed component is rendering");
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [newPost, setNewPost] = useState({ text: '', embedLink: '', tags: '' });
@@ -45,6 +48,7 @@ const PostFeed: React.FC = () => {
   const [editingComment, setEditingComment] = useState<{ postId: string; commentId: string } | null>(null);
   const [events, setEvents] = useState<{ [key: string]: Event }>({});
   const auth = getAuth();
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
@@ -90,6 +94,25 @@ const PostFeed: React.FC = () => {
     });
   }, [posts]);
 
+  useEffect(() => {
+    const savedDraft = localStorage.getItem('postDraft');
+    if (savedDraft) {
+      setNewPost(JSON.parse(savedDraft));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (newPost.text || newPost.embedLink || newPost.tags) {
+      localStorage.setItem('postDraft', JSON.stringify(newPost));
+      setIsDirty(true);
+    } else {
+      localStorage.removeItem('postDraft');
+      setIsDirty(false);
+    }
+  }, [newPost]);
+
+  useBeforeUnload(isDirty, 'You have unsaved changes. Are you sure you want to leave?');
+
   const handleAddPost = async () => {
     if (!user) {
       toast.error('Please sign in to add a post.');
@@ -99,26 +122,50 @@ const PostFeed: React.FC = () => {
       toast.error('Post content cannot be empty.');
       return;
     }
+
+    const optimisticPost: Post = {
+      id: 'temp-' + Date.now(),
+      userId: user.uid,
+      userName: user.displayName || 'Anonymous',
+      userPhotoURL: user.photoURL,
+      text: newPost.text,
+      embedLink: newPost.embedLink,
+      createdAt: Timestamp.now(),
+      likes: [],
+      comments: [],
+      tags: newPost.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== ''),
+      isBlessing: false,
+      mentions: extractMentions(newPost.text),
+    };
+
+    // Optimistically update UI
+    setPosts(prevPosts => [optimisticPost, ...prevPosts]);
+
     try {
-      await addDoc(collection(db, "posts"), {
-        userId: user.uid,
-        userName: user.displayName || 'Anonymous',
-        userPhotoURL: user.photoURL,
-        text: newPost.text,
-        embedLink: newPost.embedLink,
-        createdAt: Timestamp.now(),
-        likes: [],
-        comments: [],
-        tags: newPost.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== ''),
-        isBlessing: false,
-      });
+      const docRef = await addDoc(collection(db, "posts"), optimisticPost);
+      
+      // Update the optimistic post with the real ID
+      setPosts(prevPosts => prevPosts.map(post => 
+        post.id === optimisticPost.id ? {...post, id: docRef.id} : post
+      ));
+
       setNewPost({ text: '', embedLink: '', tags: '' });
+      localStorage.removeItem('postDraft');
+      setIsDirty(false);
       setShowAddPost(false);
       toast.success('Post added successfully! 🎉');
     } catch (error) {
       console.error('Error adding post:', error);
+      // Revert optimistic update
+      setPosts(prevPosts => prevPosts.filter(post => post.id !== optimisticPost.id));
       toast.error('Failed to add post. Please try again.');
     }
+  };
+
+  const extractMentions = (text: string): string[] => {
+    const mentionRegex = /@(\w+)/g;
+    const matches = text.match(mentionRegex);
+    return matches ? matches.map(match => match.slice(1)) : [];
   };
 
   const handleLike = async (postId: string) => {
@@ -153,7 +200,8 @@ const PostFeed: React.FC = () => {
       return;
     }
 
-    if (!commentText.trim()) {
+    const trimmedComment = commentText.trim();
+    if (!trimmedComment) {
       toast.error('Comment cannot be empty');
       return;
     }
@@ -163,7 +211,7 @@ const PostFeed: React.FC = () => {
       id: Date.now().toString(),
       userId: user.uid,
       userName: user.displayName || 'Anonymous',
-      text: commentText.trim(),
+      text: trimmedComment,
       createdAt: Timestamp.now()
     };
 
@@ -182,12 +230,12 @@ const PostFeed: React.FC = () => {
     try {
       const postRef = doc(db, "posts", postId);
       const updateData: any = {
-        text: newText,
+        text: newText.replace(/\n/g, '\n'),
         embedLink: newEmbedLink,
         tags: newTags,
       };
       if (newBlessingText !== undefined) {
-        updateData.blessingText = newBlessingText;
+        updateData.blessingText = newBlessingText.replace(/\n/g, '\n');
       }
       await updateDoc(postRef, updateData);
       setEditingPost(null);
@@ -274,7 +322,7 @@ const PostFeed: React.FC = () => {
     }
   };
 
-  const renderEmbed = useCallback((embedLink: string) => {
+  const renderEmbed = (embedLink: string) => {
     if (embedLink.includes('youtube.com') || embedLink.includes('youtu.be')) {
       const videoId = embedLink.includes('youtube.com') ? embedLink.split('v=')[1] : embedLink.split('/').pop();
       return (
@@ -302,12 +350,40 @@ const PostFeed: React.FC = () => {
     } else {
       return <img src={embedLink} alt="Embedded content" className="w-full h-auto rounded-lg" />;
     }
-  }, []);
+  };
 
   const filteredPosts = posts.filter(post => 
     post.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (post.tags && post.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
   );
+
+  const handleShare = async (postId: string) => {
+    const postUrl = `${window.location.origin}/post/${postId}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Check out this family memory!',
+          text: 'I wanted to share this family memory with you.',
+          url: postUrl,
+        });
+        toast.success('Shared successfully!');
+      } catch (error) {
+        console.error('Error sharing:', error);
+        fallbackShare(postUrl);
+      }
+    } else {
+      fallbackShare(postUrl);
+    }
+  };
+
+  const fallbackShare = (url: string) => {
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success('Link copied to clipboard!');
+    }, () => {
+      toast.error('Failed to copy link');
+    });
+  };
 
   if (loading) return (
     <div className="flex justify-center items-center h-screen">
@@ -509,7 +585,7 @@ const PostFeed: React.FC = () => {
                   {post.isBlessing ? (
                     <div className="mb-4">
                       <Gift size={24} className="text-yellow-500 mb-2" />
-                      <p className="text-lg text-gray-700 italic font-inter">{post.blessingText}</p>
+                      <p className="text-lg text-gray-700 italic font-inter whitespace-pre-wrap">{post.blessingText}</p>
                       {post.eventId && events[post.eventId] && (
                         <p className="text-sm text-blue-500 mt-2 font-semibold">
                           Blessing for: {events[post.eventId].title}
@@ -518,7 +594,7 @@ const PostFeed: React.FC = () => {
                     </div>
                   ) : (
                     <>
-                      <p className="mb-4 text-lg text-gray-700 font-inter">{post.text}</p>
+                      <p className="mb-4 text-lg text-gray-700 font-inter whitespace-pre-wrap">{post.text}</p>
                       {post.embedLink && (
                         <div className="embed-container mb-4 rounded-xl overflow-hidden">
                           {renderEmbed(post.embedLink)}
@@ -548,11 +624,7 @@ const PostFeed: React.FC = () => {
                   <span>{post.comments ? post.comments.length : 0}</span>
                 </div>
                 <button
-                  onClick={() => {
-                    const postUrl = `${window.location.origin}/post/${post.id}`;
-                    navigator.clipboard.writeText(postUrl);
-                    toast.success('Post link copied to clipboard!');
-                  }}
+                  onClick={() => handleShare(post.id)}
                   className="flex items-center text-blue-500 hover:text-blue-600 transition duration-300"
                 >
                   <Share2 size={20} className="mr-1" />
@@ -607,7 +679,7 @@ const PostFeed: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-700 font-inter">{comment.text}</p>
+                      <p className="text-sm text-gray-700 font-inter whitespace-pre-wrap">{comment.text}</p>
                     )}
                   </div>
                 ))}
@@ -648,5 +720,3 @@ const PostFeed: React.FC = () => {
 };
 
 export default PostFeed;
-
-          

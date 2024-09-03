@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Home, User, LogOut, Camera, Calendar } from "lucide-react";
+import { Home, User, LogOut, Camera, Calendar, PlusCircle, LogIn, Bot } from "lucide-react";
 import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
 import toast from 'react-hot-toast';
 
@@ -60,6 +60,20 @@ const TopNavBar: React.FC = () => {
                 <User size={24} />
                 <span className="text-xs mt-1">Profile</span>
               </Link>
+              <Link
+                to="/add-post"
+                className={`flex flex-col items-center ${location.pathname === "/add-post" ? "text-yellow-300" : "hover:text-yellow-300"} transition-colors duration-300`}
+              >
+                <PlusCircle size={24} />
+                <span className="text-xs mt-1">Add Post</span>
+              </Link>
+              <Link
+                to="/langsam-gpt"
+                className={`flex flex-col items-center ${location.pathname === "/langsam-gpt" ? "text-yellow-300" : "hover:text-yellow-300"} transition-colors duration-300`}
+              >
+                <Bot size={24} />
+                <span className="text-xs mt-1">Langsam GPT</span>
+              </Link>
               <button
                 onClick={handleSignOut}
                 className="flex flex-col items-center hover:text-yellow-300 transition-colors duration-300"
@@ -73,7 +87,7 @@ const TopNavBar: React.FC = () => {
               to="/signin"
               className="flex flex-col items-center hover:text-yellow-300 transition-colors duration-300"
             >
-              <User size={24} />
+              <LogIn size={24} />
               <span className="text-xs mt-1">Sign In</span>
             </Link>
           )}

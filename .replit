@@ -1,19 +1,33 @@
 run = "npm run dev"
-modules = ["nodejs-20"]
-hidden = [".config", "tsconfig.json", "tsconfig.node.json", "vite.config.js", ".gitignore"]
-entrypoint = "src/App.tsx"
+entrypoint = "src/index.tsx"
 
 [nix]
-channel = "stable-24_05"
+channel = "stable-22_11"
 
-[unitTest]
+[env]
+PATH = "/home/runner/$REPL_SLUG/.config/npm/node_global/bin:/home/runner/$REPL_SLUG/node_modules/.bin:$PATH"
+npm_config_prefix = "/home/runner/$REPL_SLUG/.config/npm/node_global"
+
+[packager]
 language = "nodejs"
 
+[packager.features]
+packageSearch = true
+guessImports = true
+enabledForHosting = false
+
+[languages]
+
+[languages.typescript]
+pattern = "**/{*.ts,*.js,*.tsx,*.jsx}"
+
+[languages.typescript.languageServer]
+start = "typescript-language-server --stdio"
+
 [deployment]
-deploymentTarget = "static"
-build = ["npm", "run", "build"]
-publicDir = "dist"
+run = ["sh", "-c", "npm run dev"]
+deploymentTarget = "cloudrun"
 
 [[ports]]
-localPort = 5173
+localPort = 3000
 externalPort = 80

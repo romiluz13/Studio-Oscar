@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { signInWithPopup, GoogleAuthProvider, updateProfile } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../firebase";
 import { Camera, Coffee } from 'lucide-react';
@@ -14,7 +14,14 @@ const SignIn: React.FC = () => {
     setError(null);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      // Update user profile with Google profile picture if available
+      if (user.photoURL) {
+        await updateProfile(user, { photoURL: user.photoURL });
+      }
+      
       navigate("/");
     } catch (error) {
       console.error("Error signing in with Google:", error);

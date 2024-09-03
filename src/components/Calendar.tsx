@@ -27,6 +27,11 @@ interface Event {
   };
 }
 
+interface FirestoreEvent extends Omit<Event, 'start' | 'end'> {
+  start: Timestamp;
+  end: Timestamp;
+}
+
 const Calendar: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [showEventForm, setShowEventForm] = useState(false);
@@ -54,12 +59,12 @@ const Calendar: React.FC = () => {
       const querySnapshot = await getDocs(q);
       const fetchedEvents: Event[] = [];
       querySnapshot.forEach((doc) => {
-        const data = doc.data() as Event;
+        const data = doc.data() as FirestoreEvent;
         fetchedEvents.push({
           ...data,
           id: doc.id,
-          start: data.start instanceof Date ? data.start : new Date(data.start),
-          end: data.end instanceof Date ? data.end : new Date(data.end),
+          start: data.start.toDate(),
+          end: data.end.toDate(),
         });
       });
       setEvents(fetchedEvents);
@@ -78,6 +83,8 @@ const Calendar: React.FC = () => {
       const eventData: any = {
         ...newEvent,
         createdBy: user.uid,
+        start: Timestamp.fromDate(newEvent.start),
+        end: Timestamp.fromDate(newEvent.end),
       };
 
       // Only add the rsvp field if it's an event, not an important date
@@ -89,6 +96,8 @@ const Calendar: React.FC = () => {
       const addedEvent: Event = {
         ...eventData,
         id: docRef.id,
+        start: newEvent.start,
+        end: newEvent.end,
       };
       setEvents([...events, addedEvent]);
       setNewEvent({
@@ -403,6 +412,6 @@ const Calendar: React.FC = () => {
       )}
     </div>
   );
-  };
+};
 
-  export default Calendar;
+export default Calendar;
