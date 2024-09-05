@@ -1,25 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="%PUBLIC_URL%/app.png" />
+  <link rel="shortcut icon" type="image/png" href="%PUBLIC_URL%/app.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Studio Oscar</title>
-  <link rel="stylesheet" href="/styles.css">
-  <script src="/script.js" defer></script>
-
-  <!-- Updated meta tags -->
-  <meta name="description" content="Studio Oscar. Bringing families closer through shared memories. 👨‍👩‍👧‍👦❤️">
+  
+  <!-- Meta tags for social media sharing -->
+  <meta name="description" content="Studio Oscar - Bringing families closer through shared memories. 👨‍👩‍👧‍👦❤️">
   <meta property="og:title" content="Studio Oscar">
-  <meta property="og:description" content="Studio Oscar. Bringing families closer through shared memories. 👨‍👩‍👧‍👦❤️">
-  <meta property="og:image" content="https://studioscar.life/og-image.jpg">
+  <meta property="og:description" content="Studio Oscar - Bringing families closer through shared memories. 👨‍👩‍👧‍👦❤️">
+  <meta property="og:image" content="https://studioscar.life/app.png">
   <meta property="og:url" content="https://studioscar.life">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Studio Oscar">
-  <meta name="twitter:description" content="Studio Oscar. Bringing families closer through shared memories. 👨‍👩‍👧‍👦❤️">
-  <meta name="twitter:image" content="https://studioscar.life/og-image.jpg">
+  <meta name="twitter:description" content="Studio Oscar - Bringing families closer through shared memories. ‍👩‍👧‍👦❤">
+  <meta name="twitter:image" content="https://studioscar.life/app.png">
+
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="%PUBLIC_URL%/app.png">
+
+  <!-- Content Security Policy -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com; frame-src https://*.youtube.com https://*.youtube-nocookie.com https://player.vimeo.com https://wa.me; child-src https://wa.me;">
+  
+  <!-- Preconnect to important domains -->
+  <link rel="preconnect" href="https://firebaseio.com">
+  <link rel="preconnect" href="https://apis.google.com">
 </head>
 <body>
-  <!-- ... body content ... -->
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

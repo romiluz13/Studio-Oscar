@@ -48,7 +48,11 @@ const AddPost: React.FC = () => {
     <form onSubmit={handleSubmit} className="add-post p-4 mx-auto max-w-2xl">
       <h2 className="text-3xl font-bold mb-6 text-center text-blue-800">Share a Family Memory</h2>
       <div className="mb-6 bg-white p-6 rounded-lg shadow-lg">
+        <label htmlFor="memoryText" className="block text-sm font-medium text-gray-700 mb-2">
+          Describe your memory
+        </label>
         <textarea
+          id="memoryText"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Describe your wonderful memory..."
@@ -56,7 +60,11 @@ const AddPost: React.FC = () => {
           rows={4}
           required
         />
+        <label htmlFor="embedLink" className="block text-sm font-medium text-gray-700 mb-2">
+          Add a link (optional)
+        </label>
         <input
+          id="embedLink"
           type="url"
           value={embedLink}
           onChange={(e) => setEmbedLink(e.target.value)}

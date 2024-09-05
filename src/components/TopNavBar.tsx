@@ -61,13 +61,6 @@ const TopNavBar: React.FC = () => {
                 <span className="text-xs mt-1">Profile</span>
               </Link>
               <Link
-                to="/add-post"
-                className={`flex flex-col items-center ${location.pathname === "/add-post" ? "text-yellow-300" : "hover:text-yellow-300"} transition-colors duration-300`}
-              >
-                <PlusCircle size={24} />
-                <span className="text-xs mt-1">Add Post</span>
-              </Link>
-              <Link
                 to="/langsam-gpt"
                 className={`flex flex-col items-center ${location.pathname === "/langsam-gpt" ? "text-yellow-300" : "hover:text-yellow-300"} transition-colors duration-300`}
               >

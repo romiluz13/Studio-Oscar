@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, addDoc, Timestamp, deleteDoc, getDoc } from "firebase/firestore";
+import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, addDoc, Timestamp, deleteDoc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { Heart, MessageCircle, Share2, PlusCircle, Tag, Search, Image, Youtube, Edit, Trash2, Gift, X, AlertCircle } from "lucide-react";
+import { Heart, MessageCircle, Share2, PlusCircle, Tag, Search, Image, Youtube, Edit, Trash2, Gift, X, AlertCircle, Link } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBeforeUnload } from "react-use";
@@ -49,6 +49,8 @@ const PostFeed: React.FC = () => {
   const [events, setEvents] = useState<{ [key: string]: Event }>({});
   const auth = getAuth();
   const [isDirty, setIsDirty] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareOptions, setShareOptions] = useState<Array<{ name: string, icon: React.ReactNode, action: () => void }>>([]);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
@@ -56,24 +58,27 @@ const PostFeed: React.FC = () => {
       console.log("Current user:", currentUser);
     });
 
-    const postsQuery = query(
-      collection(db, "posts"),
-      orderBy("createdAt", "desc")
+    const unsubscribe = onSnapshot(
+      query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(20)),
+      (snapshot) => {
+        const newPosts = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Post[];
+        console.log("Fetched posts:", newPosts);
+        setPosts(newPosts);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching posts:", error);
+        setLoading(false);
+        toast.error("Failed to load posts. Please try again.");
+      }
     );
-
-    const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
-      const newPosts = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Post[];
-      console.log("Fetched posts:", newPosts);
-      setPosts(newPosts);
-      setLoading(false);
-    });
 
     return () => {
       unsubscribeAuth();
-      unsubscribePosts();
+      unsubscribe();
     };
   }, [auth]);
 
@@ -113,51 +118,30 @@ const PostFeed: React.FC = () => {
 
   useBeforeUnload(isDirty, 'You have unsaved changes. Are you sure you want to leave?');
 
-  const handleAddPost = async () => {
-    if (!user) {
-      toast.error('Please sign in to add a post.');
-      return;
-    }
-    if (!newPost.text.trim()) {
-      toast.error('Post content cannot be empty.');
-      return;
-    }
-
-    const optimisticPost: Post = {
-      id: 'temp-' + Date.now(),
-      userId: user.uid,
-      userName: user.displayName || 'Anonymous',
-      userPhotoURL: user.photoURL,
-      text: newPost.text,
-      embedLink: newPost.embedLink,
-      createdAt: Timestamp.now(),
-      likes: [],
-      comments: [],
-      tags: newPost.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== ''),
-      isBlessing: false,
-      mentions: extractMentions(newPost.text),
-    };
-
-    // Optimistically update UI
-    setPosts(prevPosts => [optimisticPost, ...prevPosts]);
+  const handleAddPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
 
     try {
-      const docRef = await addDoc(collection(db, "posts"), optimisticPost);
-      
-      // Update the optimistic post with the real ID
-      setPosts(prevPosts => prevPosts.map(post => 
-        post.id === optimisticPost.id ? {...post, id: docRef.id} : post
-      ));
+      const newPostRef = await addDoc(collection(db, "posts"), {
+        userId: user.uid,
+        userName: user.displayName,
+        userPhotoURL: user.photoURL,
+        text: newPost.text,
+        embedLink: newPost.embedLink,
+        createdAt: Timestamp.now(),
+        likes: [],
+        comments: [],
+        tags: newPost.tags.split(',').map(tag => tag.trim()),
+        isBlessing: false,
+        mentions: [],
+      });
 
       setNewPost({ text: '', embedLink: '', tags: '' });
-      localStorage.removeItem('postDraft');
-      setIsDirty(false);
       setShowAddPost(false);
-      toast.success('Post added successfully! 🎉');
+      toast.success('Post added successfully!');
     } catch (error) {
-      console.error('Error adding post:', error);
-      // Revert optimistic update
-      setPosts(prevPosts => prevPosts.filter(post => post.id !== optimisticPost.id));
+      console.error("Error adding post: ", error);
       toast.error('Failed to add post. Please try again.');
     }
   };
@@ -195,30 +179,21 @@ const PostFeed: React.FC = () => {
   };
 
   const handleComment = async (postId: string, commentText: string) => {
-    if (!user) {
-      toast.error('Please sign in to comment');
-      return;
-    }
-
-    const trimmedComment = commentText.trim();
-    if (!trimmedComment) {
-      toast.error('Comment cannot be empty');
-      return;
-    }
-
-    const postRef = doc(db, "posts", postId);
-    const newComment = {
-      id: Date.now().toString(),
-      userId: user.uid,
-      userName: user.displayName || 'Anonymous',
-      text: trimmedComment,
-      createdAt: Timestamp.now()
-    };
+    if (!user) return;
 
     try {
+      const postRef = doc(db, "posts", postId);
+      const newComment = {
+        id: Date.now().toString(),
+        userId: user.uid,
+        userName: user.displayName,
+        text: commentText,
+        createdAt: Timestamp.now(),
+      };
       await updateDoc(postRef, {
-        comments: arrayUnion(newComment)
+        comments: arrayUnion(newComment),
       });
+      setPosts(posts.map(post => post.id === postId ? { ...post, comments: [...post.comments, newComment] } : post));
       toast.success('Comment added successfully');
     } catch (error) {
       console.error('Error adding comment:', error);
@@ -226,18 +201,16 @@ const PostFeed: React.FC = () => {
     }
   };
 
-  const handleEditPost = async (postId: string, newText: string, newEmbedLink: string, newTags: string[], newBlessingText?: string) => {
+  const handleEditPost = async (postId: string, newText: string, isBlessing: boolean) => {
     try {
       const postRef = doc(db, "posts", postId);
-      const updateData: any = {
-        text: newText.replace(/\n/g, '\n'),
-        embedLink: newEmbedLink,
-        tags: newTags,
-      };
-      if (newBlessingText !== undefined) {
-        updateData.blessingText = newBlessingText.replace(/\n/g, '\n');
+      if (isBlessing) {
+        await updateDoc(postRef, { blessingText: newText });
+        setPosts(posts.map(post => post.id === postId ? { ...post, blessingText: newText } : post));
+      } else {
+        await updateDoc(postRef, { text: newText });
+        setPosts(posts.map(post => post.id === postId ? { ...post, text: newText } : post));
       }
-      await updateDoc(postRef, updateData);
       setEditingPost(null);
       toast.success('Post updated successfully');
     } catch (error) {
@@ -247,14 +220,13 @@ const PostFeed: React.FC = () => {
   };
 
   const handleDeletePost = async (postId: string) => {
-    if (window.confirm('Are you sure you want to delete this post?')) {
-      try {
-        await deleteDoc(doc(db, "posts", postId));
-        toast.success('Post deleted successfully');
-      } catch (error) {
-        console.error('Error deleting post:', error);
-        toast.error('Failed to delete post. Please try again.');
-      }
+    try {
+      await deleteDoc(doc(db, "posts", postId));
+      setPosts(posts.filter(post => post.id !== postId));
+      toast.success('Post deleted successfully');
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      toast.error('Failed to delete post. Please try again.');
     }
   };
 
@@ -267,6 +239,7 @@ const PostFeed: React.FC = () => {
           comment.id === commentId ? { ...comment, text: newText } : comment
         );
         await updateDoc(postRef, { comments: updatedComments });
+        setPosts(posts.map(p => p.id === postId ? { ...p, comments: updatedComments } : p));
         setEditingComment(null);
         toast.success('Comment updated successfully');
       }
@@ -283,6 +256,7 @@ const PostFeed: React.FC = () => {
       if (post) {
         const updatedComments = post.comments.filter(comment => comment.id !== commentId);
         await updateDoc(postRef, { comments: updatedComments });
+        setPosts(posts.map(p => p.id === postId ? { ...p, comments: updatedComments } : p));
         toast.success('Comment deleted successfully');
       }
     } catch (error) {
@@ -357,33 +331,85 @@ const PostFeed: React.FC = () => {
     (post.tags && post.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())))
   );
 
-  const handleShare = async (postId: string) => {
-    const postUrl = `${window.location.origin}/post/${postId}`;
+  const handleShare = (postId: string) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
 
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Check out this family memory!',
-          text: 'I wanted to share this family memory with you.',
-          url: postUrl,
-        });
-        toast.success('Shared successfully!');
-      } catch (error) {
-        console.error('Error sharing:', error);
-        fallbackShare(postUrl);
+    const postUrl = `${window.location.origin}/#/post/${postId}`;
+    let shareText = `בוא לראות את הזיכרון המשפחתי הזה: ${post.text}`;
+
+    if (post.embedLink) {
+      if (post.embedLink.includes('youtube.com') || post.embedLink.includes('youtu.be')) {
+        shareText += `\n\nצפה בסרטון: ${post.embedLink}`;
+      } else if (post.embedLink.includes('vimeo.com')) {
+        shareText += `\n\nצפה בסרטון: ${post.embedLink}`;
+      } else {
+        shareText += `\n\nצפה בתמונה: ${post.embedLink}`;
       }
-    } else {
-      fallbackShare(postUrl);
     }
+
+    shareText += `\n\nקישור לפוסט: ${postUrl}`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+
+    setShareOptions([
+      { 
+        name: 'שתף בוואטסאפ', 
+        icon: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#25D366" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>, 
+        action: () => window.open(whatsappUrl, '_blank')
+      },
+      { 
+        name: 'העתק קישור', 
+        icon: <Link size={24} color="#4267B2" />, 
+        action: () => copyToClipboard(postUrl)
+      }
+    ]);
+    setShowShareModal(true);
   };
 
-  const fallbackShare = (url: string) => {
-    navigator.clipboard.writeText(url).then(() => {
-      toast.success('Link copied to clipboard!');
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toast.success('הקישור הועתק ללוח!', {
+        icon: '📋',
+        style: {
+          borderRadius: '10px',
+          background: '#333',
+          color: '#fff',
+        },
+      });
     }, () => {
-      toast.error('Failed to copy link');
+      toast.error('שגיאה בהעתקת הקישור', {
+        icon: '❌',
+        style: {
+          borderRadius: '10px',
+          background: '#333',
+          color: '#fff',
+        },
+      });
     });
   };
+
+  const ShareModal = ({ options, onClose }: { options: Array<{ name: string, icon: React.ReactNode, action: () => void }>, onClose: () => void }) => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+        <h3 className="text-2xl font-bold mb-4 text-center text-blue-800">שתף זיכרון</h3>
+        <div className="space-y-3">
+          {options.map((option, index) => (
+            <button
+              key={index}
+              onClick={() => {
+                option.action();
+                onClose();
+              }}
+              className="w-full flex items-center justify-between py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition duration-300 shadow-md"
+            >
+              <span className="font-semibold">{option.name}</span>
+              {option.icon}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   if (loading) return (
     <div className="flex justify-center items-center h-screen">
@@ -528,53 +554,25 @@ const PostFeed: React.FC = () => {
                 )}
               </div>
               {editingPost === post.id ? (
-                <div className="mb-4">
-                  {post.isBlessing ? (
-                    <textarea
-                      defaultValue={post.blessingText}
-                      className="w-full p-2 border border-gray-300 rounded-lg mb-2"
-                      rows={3}
-                    />
-                  ) : (
-                    <>
-                      <textarea
-                        defaultValue={post.text}
-                        className="w-full p-2 border border-gray-300 rounded-lg mb-2"
-                        rows={3}
-                      />
-                      <input
-                        type="text"
-                        defaultValue={post.embedLink}
-                        placeholder="Embed link (YouTube, Vimeo, image)"
-                        className="w-full p-2 border border-gray-300 rounded-lg mb-2"
-                      />
-                      <input
-                        type="text"
-                        defaultValue={post.tags.join(', ')}
-                        placeholder="Tags (comma-separated)"
-                        className="w-full p-2 border border-gray-300 rounded-lg mb-2"
-                      />
-                    </>
-                  )}
+                <div className="mt-2">
+                  <textarea
+                    defaultValue={post.isBlessing ? post.blessingText : post.text}
+                    className="w-full p-2 border border-gray-300 rounded-lg mb-2"
+                    rows={4}
+                  />
                   <div className="flex justify-end space-x-2">
                     <button
                       onClick={() => {
-                        const textArea = document.querySelector('textarea') as HTMLTextAreaElement;
-                        const embedInput = document.querySelector('input[placeholder="Embed link (YouTube, Vimeo, image)"]') as HTMLInputElement;
-                        const tagsInput = document.querySelector('input[placeholder="Tags (comma-separated)"]') as HTMLInputElement;
-                        if (post.isBlessing) {
-                          handleEditPost(post.id, '', '', [], textArea.value);
-                        } else {
-                          handleEditPost(post.id, textArea.value, embedInput?.value || '', tagsInput?.value.split(',').map(tag => tag.trim()) || []);
-                        }
+                        const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+                        handleEditPost(post.id, textarea.value, post.isBlessing);
                       }}
-                      className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition duration-300"
+                      className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-600 transition duration-300"
                     >
                       Save
                     </button>
                     <button
                       onClick={() => setEditingPost(null)}
-                      className="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400 transition duration-300"
+                      className="bg-gray-300 text-gray-800 px-3 py-1 rounded-lg text-sm hover:bg-gray-400 transition duration-300"
                     >
                       Cancel
                     </button>
@@ -715,6 +713,14 @@ const PostFeed: React.FC = () => {
           ))}
         </AnimatePresence>
       </div>
+      <AnimatePresence>
+        {showShareModal && (
+          <ShareModal
+            options={shareOptions}
+            onClose={() => setShowShareModal(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

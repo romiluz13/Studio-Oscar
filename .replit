@@ -1,8 +1,8 @@
 run = "npm run dev"
-entrypoint = "src/index.tsx"
+modules = ["nodejs-20", "web", "nix"]
 
 [nix]
-channel = "stable-22_11"
+channel = "stable-24_05"
 
 [env]
 PATH = "/home/runner/$REPL_SLUG/.config/npm/node_global/bin:/home/runner/$REPL_SLUG/node_modules/.bin:$PATH"
@@ -25,8 +25,8 @@ pattern = "**/{*.ts,*.js,*.tsx,*.jsx}"
 start = "typescript-language-server --stdio"
 
 [deployment]
-run = ["sh", "-c", "npm run dev"]
-deploymentTarget = "cloudrun"
+deploymentTarget = "static"
+publicDir = "dist"
 
 [[ports]]
 localPort = 3000
